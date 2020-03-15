@@ -39,7 +39,9 @@ struct _sharednsitem {
     _PyCrossInterpreterData data;
 };
 
-static void _sharednsitem_clear(struct _sharednsitem *);  // forward
+/* Forward declaration */
+static void _sharednsitem_clear(struct _sharednsitem *);
+static struct PyModuleDef interpretersmodule;
 
 static int
 _sharednsitem_init(struct _sharednsitem *item, PyObject *key, PyObject *value)
@@ -283,64 +285,75 @@ _sharedexception_apply(_sharedexception *exc, PyObject *wrapperclass)
 #define CHANNEL_BOTH 0
 #define CHANNEL_RECV -1
 
-static PyObject *ChannelError;
-static PyObject *ChannelNotFoundError;
-static PyObject *ChannelClosedError;
-static PyObject *ChannelEmptyError;
-static PyObject *ChannelNotEmptyError;
+typedef struct {
+    PyObject *ChannelError;
+    PyObject *ChannelNotFoundError;
+    PyObject *ChannelClosedError;
+    PyObject *ChannelEmptyError;
+    PyObject *ChannelNotEmptyError;
+    PyObject *RunFailedError;
+} interpreters_state;
+
+static inline interpreters_state*
+get_interpreters_state(PyObject *module)
+{
+    void *state = PyModule_GetState(module);
+    assert(state != NULL);
+    return (interpreters_state *)state;
+}
 
 static int
-channel_exceptions_init(PyObject *ns)
+channel_exceptions_init(PyObject *ns, interpreters_state *state)
 {
-    // XXX Move the exceptions into per-module memory?
-
     // A channel-related operation failed.
-    ChannelError = PyErr_NewException("_xxsubinterpreters.ChannelError",
-                                      PyExc_RuntimeError, NULL);
-    if (ChannelError == NULL) {
+    state->ChannelError = PyErr_NewException("_xxsubinterpreters.ChannelError",
+                                             PyExc_RuntimeError, NULL);
+    if (state->ChannelError == NULL) {
         return -1;
     }
-    if (PyDict_SetItemString(ns, "ChannelError", ChannelError) != 0) {
+    if (PyDict_SetItemString(ns, "ChannelError", state->ChannelError) != 0) {
         return -1;
     }
 
     // An operation tried to use a channel that doesn't exist.
-    ChannelNotFoundError = PyErr_NewException(
-            "_xxsubinterpreters.ChannelNotFoundError", ChannelError, NULL);
-    if (ChannelNotFoundError == NULL) {
+    state->ChannelNotFoundError = PyErr_NewException(
+            "_xxsubinterpreters.ChannelNotFoundError", state->ChannelError, NULL);
+    if (state->ChannelNotFoundError == NULL) {
         return -1;
     }
-    if (PyDict_SetItemString(ns, "ChannelNotFoundError", ChannelNotFoundError) != 0) {
+    if (PyDict_SetItemString(ns, "ChannelNotFoundError",
+                             state->ChannelNotFoundError) != 0) {
         return -1;
     }
 
     // An operation tried to use a closed channel.
-    ChannelClosedError = PyErr_NewException(
-            "_xxsubinterpreters.ChannelClosedError", ChannelError, NULL);
-    if (ChannelClosedError == NULL) {
+    state->ChannelClosedError = PyErr_NewException(
+            "_xxsubinterpreters.ChannelClosedError", state->ChannelError, NULL);
+    if (state->ChannelClosedError == NULL) {
         return -1;
     }
-    if (PyDict_SetItemString(ns, "ChannelClosedError", ChannelClosedError) != 0) {
+    if (PyDict_SetItemString(ns, "ChannelClosedError", state->ChannelClosedError) != 0) {
         return -1;
     }
 
     // An operation tried to pop from an empty channel.
-    ChannelEmptyError = PyErr_NewException(
-            "_xxsubinterpreters.ChannelEmptyError", ChannelError, NULL);
-    if (ChannelEmptyError == NULL) {
+    state->ChannelEmptyError = PyErr_NewException(
+            "_xxsubinterpreters.ChannelEmptyError", state->ChannelError, NULL);
+    if (state->ChannelEmptyError == NULL) {
         return -1;
     }
-    if (PyDict_SetItemString(ns, "ChannelEmptyError", ChannelEmptyError) != 0) {
+    if (PyDict_SetItemString(ns, "ChannelEmptyError", state->ChannelEmptyError) != 0) {
         return -1;
     }
 
     // An operation tried to close a non-empty channel.
-    ChannelNotEmptyError = PyErr_NewException(
-            "_xxsubinterpreters.ChannelNotEmptyError", ChannelError, NULL);
-    if (ChannelNotEmptyError == NULL) {
+    state->ChannelNotEmptyError = PyErr_NewException(
+            "_xxsubinterpreters.ChannelNotEmptyError", state->ChannelError, NULL);
+    if (state->ChannelNotEmptyError == NULL) {
         return -1;
     }
-    if (PyDict_SetItemString(ns, "ChannelNotEmptyError", ChannelNotEmptyError) != 0) {
+    if (PyDict_SetItemString(ns, "ChannelNotEmptyError",
+                             state->ChannelNotEmptyError) != 0) {
         return -1;
     }
 
@@ -615,9 +628,16 @@ _channelends_associate(_channelends *ends, int64_t interp, int send)
     _channelend *prev;
     _channelend *end = _channelend_find(send ? ends->send : ends->recv,
                                         interp, &prev);
+
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return -1;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     if (end != NULL) {
         if (!end->open) {
-            PyErr_SetString(ChannelClosedError, "channel already closed");
+            PyErr_SetString(state->ChannelClosedError, "channel already closed");
             return -1;
         }
         // already associated
@@ -723,10 +743,17 @@ _channel_new(void)
     if (chan == NULL) {
         return NULL;
     }
+
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return NULL;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     chan->mutex = PyThread_allocate_lock();
     if (chan->mutex == NULL) {
         PyMem_Free(chan);
-        PyErr_SetString(ChannelError,
+        PyErr_SetString(state->ChannelError,
                         "can't initialize mutex for new channel");
         return NULL;
     }
@@ -766,8 +793,14 @@ _channel_add(_PyChannelState *chan, int64_t interp,
     int res = -1;
     PyThread_acquire_lock(chan->mutex, WAIT_LOCK);
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     if (!chan->open) {
-        PyErr_SetString(ChannelClosedError, "channel closed");
+        PyErr_SetString(state->ChannelClosedError, "channel closed");
         goto done;
     }
     if (_channelends_associate(chan->ends, interp, 1) != 0) {
@@ -790,8 +823,14 @@ _channel_next(_PyChannelState *chan, int64_t interp)
     _PyCrossInterpreterData *data = NULL;
     PyThread_acquire_lock(chan->mutex, WAIT_LOCK);
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     if (!chan->open) {
-        PyErr_SetString(ChannelClosedError, "channel closed");
+        PyErr_SetString(state->ChannelClosedError, "channel closed");
         goto done;
     }
     if (_channelends_associate(chan->ends, interp, 0) != 0) {
@@ -814,11 +853,17 @@ done:
 static int
 _channel_close_interpreter(_PyChannelState *chan, int64_t interp, int end)
 {
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return -1;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     PyThread_acquire_lock(chan->mutex, WAIT_LOCK);
 
     int res = -1;
     if (!chan->open) {
-        PyErr_SetString(ChannelClosedError, "channel already closed");
+        PyErr_SetString(state->ChannelClosedError, "channel already closed");
         goto done;
     }
 
@@ -839,13 +884,19 @@ _channel_close_all(_PyChannelState *chan, int end, int force)
     int res = -1;
     PyThread_acquire_lock(chan->mutex, WAIT_LOCK);
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     if (!chan->open) {
-        PyErr_SetString(ChannelClosedError, "channel already closed");
+        PyErr_SetString(state->ChannelClosedError, "channel already closed");
         goto done;
     }
 
     if (!force && chan->queue->count > 0) {
-        PyErr_SetString(ChannelNotEmptyError,
+        PyErr_SetString(state->ChannelNotEmptyError,
                         "may not be closed if not empty (try force=True)");
         goto done;
     }
@@ -932,12 +983,12 @@ typedef struct _channels {
 } _channels;
 
 static int
-_channels_init(_channels *channels)
+_channels_init(_channels *channels, interpreters_state *state)
 {
     if (channels->mutex == NULL) {
         channels->mutex = PyThread_allocate_lock();
         if (channels->mutex == NULL) {
-            PyErr_SetString(ChannelError,
+            PyErr_SetString(state->ChannelError,
                             "can't initialize mutex for channel management");
             return -1;
         }
@@ -951,10 +1002,16 @@ _channels_init(_channels *channels)
 static int64_t
 _channels_next_id(_channels *channels)  // needs lock
 {
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return -1;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     int64_t id = channels->next_id;
     if (id < 0) {
         /* overflow */
-        PyErr_SetString(ChannelError,
+        PyErr_SetString(state->ChannelError,
                         "failed to get a channel ID");
         return -1;
     }
@@ -971,13 +1028,19 @@ _channels_lookup(_channels *channels, int64_t id, PyThread_type_lock *pmutex)
         *pmutex = NULL;
     }
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     _channelref *ref = _channelref_find(channels->head, id, NULL);
     if (ref == NULL) {
-        PyErr_Format(ChannelNotFoundError, "channel %" PRId64 " not found", id);
+        PyErr_Format(state->ChannelNotFoundError, "channel %" PRId64 " not found", id);
         goto done;
     }
     if (ref->chan == NULL || !ref->chan->open) {
-        PyErr_Format(ChannelClosedError, "channel %" PRId64 " closed", id);
+        PyErr_Format(state->ChannelClosedError, "channel %" PRId64 " closed", id);
         goto done;
     }
 
@@ -1035,26 +1098,32 @@ _channels_close(_channels *channels, int64_t cid, _PyChannelState **pchan,
         *pchan = NULL;
     }
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     _channelref *ref = _channelref_find(channels->head, cid, NULL);
     if (ref == NULL) {
-        PyErr_Format(ChannelNotFoundError, "channel %" PRId64 " not found", cid);
+        PyErr_Format(state->ChannelNotFoundError, "channel %" PRId64 " not found", cid);
         goto done;
     }
 
     if (ref->chan == NULL) {
-        PyErr_Format(ChannelClosedError, "channel %" PRId64 " closed", cid);
+        PyErr_Format(state->ChannelClosedError, "channel %" PRId64 " closed", cid);
         goto done;
     }
     else if (!force && end == CHANNEL_SEND && ref->chan->closing != NULL) {
-        PyErr_Format(ChannelClosedError, "channel %" PRId64 " closed", cid);
+        PyErr_Format(state->ChannelClosedError, "channel %" PRId64 " closed", cid);
         goto done;
     }
     else {
         if (_channel_close_all(ref->chan, end, force) != 0) {
             if (end == CHANNEL_SEND &&
-                    PyErr_ExceptionMatches(ChannelNotEmptyError)) {
+                    PyErr_ExceptionMatches(state->ChannelNotEmptyError)) {
                 if (ref->chan->closing != NULL) {
-                    PyErr_Format(ChannelClosedError,
+                    PyErr_Format(state->ChannelClosedError,
                                  "channel %" PRId64 " closed", cid);
                     goto done;
                 }
@@ -1110,6 +1179,12 @@ _channels_remove(_channels *channels, int64_t id, _PyChannelState **pchan)
     int res = -1;
     PyThread_acquire_lock(channels->mutex, WAIT_LOCK);
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     if (pchan != NULL) {
         *pchan = NULL;
     }
@@ -1117,7 +1192,7 @@ _channels_remove(_channels *channels, int64_t id, _PyChannelState **pchan)
     _channelref *prev = NULL;
     _channelref *ref = _channelref_find(channels->head, id, &prev);
     if (ref == NULL) {
-        PyErr_Format(ChannelNotFoundError, "channel %" PRId64 " not found", id);
+        PyErr_Format(state->ChannelNotFoundError, "channel %" PRId64 " not found", id);
         goto done;
     }
 
@@ -1135,9 +1210,15 @@ _channels_add_id_object(_channels *channels, int64_t id)
     int res = -1;
     PyThread_acquire_lock(channels->mutex, WAIT_LOCK);
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        goto done;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     _channelref *ref = _channelref_find(channels->head, id, NULL);
     if (ref == NULL) {
-        PyErr_Format(ChannelNotFoundError, "channel %" PRId64 " not found", id);
+        PyErr_Format(state->ChannelNotFoundError, "channel %" PRId64 " not found", id);
         goto done;
     }
     ref->objcount += 1;
@@ -1208,6 +1289,12 @@ struct _channel_closing {
 
 static int
 _channel_set_closing(struct _channelref *ref, PyThread_type_lock mutex) {
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return -1;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     struct _channel *chan = ref->chan;
     if (chan == NULL) {
         // already closed
@@ -1216,7 +1303,7 @@ _channel_set_closing(struct _channelref *ref, PyThread_type_lock mutex) {
     int res = -1;
     PyThread_acquire_lock(chan->mutex, WAIT_LOCK);
     if (chan->closing != NULL) {
-        PyErr_SetString(ChannelClosedError, "channel closed");
+        PyErr_SetString(state->ChannelClosedError, "channel closed");
         goto done;
     }
     chan->closing = PyMem_NEW(struct _channel_closing, 1);
@@ -1300,8 +1387,14 @@ _channel_send(_channels *channels, int64_t id, PyObject *obj)
     }
     // Past this point we are responsible for releasing the mutex.
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return -1;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     if (chan->closing != NULL) {
-        PyErr_Format(ChannelClosedError, "channel %" PRId64 " closed", id);
+        PyErr_Format(state->ChannelClosedError, "channel %" PRId64 " closed", id);
         PyThread_release_lock(mutex);
         return -1;
     }
@@ -1338,6 +1431,12 @@ _channel_recv(_channels *channels, int64_t id)
         return NULL;
     }
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return NULL;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     // Look up the channel.
     PyThread_type_lock mutex = NULL;
     _PyChannelState *chan = _channels_lookup(channels, id, &mutex);
@@ -1351,7 +1450,7 @@ _channel_recv(_channels *channels, int64_t id)
     PyThread_release_lock(mutex);
     if (data == NULL) {
         if (!PyErr_Occurred()) {
-            PyErr_Format(ChannelEmptyError, "channel %" PRId64 " is empty", id);
+            PyErr_Format(state->ChannelEmptyError, "channel %" PRId64 " is empty", id);
         }
         return NULL;
     }
@@ -1443,13 +1542,20 @@ newchannelid(PyTypeObject *cls, int64_t cid, int end, _channels *channels,
     if (self == NULL) {
         return NULL;
     }
+
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return NULL;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     self->id = cid;
     self->end = end;
     self->resolve = resolve;
     self->channels = channels;
 
     if (_channels_add_id_object(channels, cid) != 0) {
-        if (force && PyErr_ExceptionMatches(ChannelNotFoundError)) {
+        if (force && PyErr_ExceptionMatches(state->ChannelNotFoundError)) {
             PyErr_Clear();
         }
         else {
@@ -1798,22 +1904,17 @@ static PyTypeObject ChannelIDtype = {
 
 
 /* interpreter-specific code ************************************************/
-
-static PyObject * RunFailedError = NULL;
-
 static int
-interp_exceptions_init(PyObject *ns)
+interp_exceptions_init(PyObject *ns, interpreters_state *state)
 {
-    // XXX Move the exceptions into per-module memory?
-
-    if (RunFailedError == NULL) {
+    if (state->RunFailedError == NULL) {
         // An uncaught exception came out of interp_run_string().
-        RunFailedError = PyErr_NewException("_xxsubinterpreters.RunFailedError",
-                                            PyExc_RuntimeError, NULL);
-        if (RunFailedError == NULL) {
+        state->RunFailedError = PyErr_NewException("_xxsubinterpreters.RunFailedError",
+                                                   PyExc_RuntimeError, NULL);
+        if (state->RunFailedError == NULL) {
             return -1;
         }
-        if (PyDict_SetItemString(ns, "RunFailedError", RunFailedError) != 0) {
+        if (PyDict_SetItemString(ns, "RunFailedError", state->RunFailedError) != 0) {
             return -1;
         }
     }
@@ -1926,6 +2027,12 @@ _run_script_in_interpreter(PyInterpreterState *interp, const char *codestr,
         return -1;
     }
 
+    PyObject *module = PyState_FindModule(&interpretersmodule);
+    if (module == NULL) {
+        return -1;
+    }
+    interpreters_state *state = get_interpreters_state(module);
+
     // Switch to interpreter.
     PyThreadState *save_tstate = NULL;
     if (interp != PyInterpreterState_Get()) {
@@ -1946,7 +2053,7 @@ _run_script_in_interpreter(PyInterpreterState *interp, const char *codestr,
 
     // Propagate any exception out to the caller.
     if (exc != NULL) {
-        _sharedexception_apply(exc, RunFailedError);
+        _sharedexception_apply(exc, state->RunFailedError);
         _sharedexception_free(exc);
     }
     else if (result != 0) {
@@ -1972,9 +2079,9 @@ static struct globals {
 } _globals = {{0}};
 
 static int
-_init_globals(void)
+_init_globals(interpreters_state *state)
 {
-    if (_channels_init(&_globals.channels) != 0) {
+    if (_channels_init(&_globals.channels, state) != 0) {
         return -1;
     }
     return 0;
@@ -2499,26 +2606,54 @@ PyDoc_STRVAR(module_doc,
 "This module provides primitive operations to manage Python interpreters.\n\
 The 'interpreters' module provides a more convenient interface.");
 
+static int
+subinterpreters_traverse(PyObject *module, visitproc visit, void *arg)
+{
+    interpreters_state *state = get_interpreters_state(module);
+    Py_VISIT(state->ChannelError);
+    Py_VISIT(state->ChannelNotFoundError);
+    Py_VISIT(state->ChannelClosedError);
+    Py_VISIT(state->ChannelEmptyError);
+    Py_VISIT(state->ChannelNotEmptyError);
+    Py_VISIT(state->RunFailedError);
+    return 0;
+}
+
+static int
+subinterpreters_clear(PyObject *module)
+{
+    interpreters_state *state = get_interpreters_state(module);
+    Py_CLEAR(state->ChannelError);
+    Py_CLEAR(state->ChannelNotFoundError);
+    Py_CLEAR(state->ChannelClosedError);
+    Py_CLEAR(state->ChannelEmptyError);
+    Py_CLEAR(state->ChannelNotEmptyError);
+    Py_CLEAR(state->RunFailedError);
+    return 0;
+}
+
+static void
+subinterpreters_free(void *module)
+{
+    subinterpreters_clear((PyObject *)module);
+}
+
 static struct PyModuleDef interpretersmodule = {
     PyModuleDef_HEAD_INIT,
-    "_xxsubinterpreters",  /* m_name */
-    module_doc,            /* m_doc */
-    -1,                    /* m_size */
-    module_functions,      /* m_methods */
-    NULL,                  /* m_slots */
-    NULL,                  /* m_traverse */
-    NULL,                  /* m_clear */
-    NULL                   /* m_free */
+    "_xxsubinterpreters",         /* m_name */
+    module_doc,                   /* m_doc */
+    sizeof(interpreters_state),   /* m_size */
+    module_functions,             /* m_methods */
+    NULL,                         /* m_slots */
+    subinterpreters_traverse,     /* m_traverse */
+    subinterpreters_clear,        /* m_clear */
+    subinterpreters_free          /* m_free */
 };
 
 
 PyMODINIT_FUNC
 PyInit__xxsubinterpreters(void)
 {
-    if (_init_globals() != 0) {
-        return NULL;
-    }
-
     /* Initialize types */
     if (PyType_Ready(&ChannelIDtype) != 0) {
         return NULL;
@@ -2529,13 +2664,18 @@ PyInit__xxsubinterpreters(void)
     if (module == NULL) {
         return NULL;
     }
+    interpreters_state *state = get_interpreters_state(module);
+
+    if (_init_globals(state) != 0) {
+        return NULL;
+    }
 
     /* Add exception types */
     PyObject *ns = PyModule_GetDict(module);  // borrowed
-    if (interp_exceptions_init(ns) != 0) {
+    if (interp_exceptions_init(ns, state) != 0) {
         return NULL;
     }
-    if (channel_exceptions_init(ns) != 0) {
+    if (channel_exceptions_init(ns, state) != 0) {
         return NULL;
     }
 
@@ -2552,6 +2692,8 @@ PyInit__xxsubinterpreters(void)
     if (_PyCrossInterpreterData_RegisterClass(&ChannelIDtype, _channelid_shared)) {
         return NULL;
     }
+
+    PyState_AddModule(module, &interpretersmodule);
 
     return module;
 }
