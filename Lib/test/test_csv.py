@@ -1071,8 +1071,8 @@ class TestLeaks(unittest.TestCase):
             csv.reader(["a,b,c\r\n"])
             delta = rc-lastrc
             lastrc = rc
-        # if csv.reader() leaks, last delta should be 3 or more
-        self.assertLess(delta, 3)
+        # if csv.reader() leaks, last delta should not be 7 or more
+        self.assertLess(delta, 7)
 
     def test_create_write(self):
         delta = 0
@@ -1087,8 +1087,8 @@ class TestLeaks(unittest.TestCase):
             csv.writer(s)
             delta = rc-lastrc
             lastrc = rc
-        # if csv.writer() leaks, last delta should be 3 or more
-        self.assertLess(delta, 3)
+        # if csv.writer() leaks, last delta should not be 7 or more
+        self.assertLess(delta, 7)
 
     def test_read(self):
         delta = 0
