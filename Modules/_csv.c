@@ -490,17 +490,20 @@ err:
 }
 
 /* Since dialect is now a heap type, it inherits pickling method for
- * protocol 0 and 1 from object, therefore it needs to be overrided */
+ * protocol 0 and 1 from object, therefore it needs to be overriden */
+
+PyDoc_STRVAR(dialect_reduce_doc, "raises an exception to avoid pickling");
 
 static PyObject *
-_csv_dialect__reduce_ex__(PyObject *self, PyObject *args) {
-    PyErr_SetString(PyExc_TypeError,
-                    "Dialect object cannot be pickled.");
+Dialect_reduce(PyObject *self, PyObject *args) {
+    PyErr_Format(PyExc_TypeError,
+        "cannot pickle '%.100s' instances", _PyType_Name(Py_TYPE(self)));
     return NULL;
 }
 
 static struct PyMethodDef dialect_methods[] = {
-    {"__reduce_ex__", _csv_dialect__reduce_ex__, METH_VARARGS, NULL},
+    {"__reduce__", Dialect_reduce, METH_VARARGS, dialect_reduce_doc},
+    {"__reduce_ex__", Dialect_reduce, METH_VARARGS, dialect_reduce_doc},
     {NULL, NULL}
 };
 
