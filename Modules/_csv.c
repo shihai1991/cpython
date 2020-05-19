@@ -325,8 +325,10 @@ static PyGetSetDef Dialect_getsetlist[] = {
 static void
 Dialect_dealloc(DialectObj *self)
 {
+    PyTypeObject *tp = Py_TYPE(self);
     Py_XDECREF(self->lineterminator);
-    Py_TYPE(self)->tp_free((PyObject *)self);
+    tp->tp_free((PyObject *)self);
+    Py_DECREF(tp);
 }
 
 static char *dialect_kws[] = {
@@ -882,6 +884,7 @@ err:
 static void
 Reader_dealloc(ReaderObj *self)
 {
+    PyTypeObject *tp = Py_TYPE(self);
     PyObject_GC_UnTrack(self);
     Py_XDECREF(self->dialect);
     Py_XDECREF(self->input_iter);
@@ -889,6 +892,7 @@ Reader_dealloc(ReaderObj *self)
     if (self->field != NULL)
         PyMem_Free(self->field);
     PyObject_GC_Del(self);
+    Py_DECREF(tp);
 }
 
 static int
@@ -1315,6 +1319,7 @@ static struct PyMemberDef Writer_memberlist[] = {
 static void
 Writer_dealloc(WriterObj *self)
 {
+    PyTypeObject *tp = Py_TYPE(self);
     PyObject_GC_UnTrack(self);
     Py_XDECREF(self->dialect);
     Py_XDECREF(self->write);
@@ -1322,6 +1327,7 @@ Writer_dealloc(WriterObj *self)
         PyMem_Free(self->rec);
     Py_XDECREF(self->error_obj);
     PyObject_GC_Del(self);
+    Py_DECREF(tp);
 }
 
 static int
