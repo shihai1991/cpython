@@ -331,6 +331,12 @@ Dialect_dealloc(DialectObj *self)
     Py_DECREF(tp);
 }
 
+static void
+Dialect_finalize(DialectObj *self)
+{
+    Py_XDECREF(self->lineterminator);
+}
+
 static char *dialect_kws[] = {
     "dialect",
     "delimiter",
@@ -504,7 +510,7 @@ PyDoc_STRVAR(Dialect_Type_doc,
 "The Dialect type records CSV parsing and generation options.\n");
 
 static PyType_Slot Dialect_Type_slots[] = {
-    {Py_tp_dealloc, Dialect_dealloc},
+    {Py_tp_finalize, Dialect_finalize},
     {Py_tp_doc, (char*)Dialect_Type_doc},
     {Py_tp_members, Dialect_memberlist},
     {Py_tp_getset, Dialect_getsetlist},
@@ -895,6 +901,17 @@ Reader_dealloc(ReaderObj *self)
     Py_DECREF(tp);
 }
 
+static void
+Reader_finalize(ReaderObj *self)
+{
+    Py_XDECREF(self->dialect);
+    Py_XDECREF(self->input_iter);
+    Py_XDECREF(self->fields);
+    if (self->field != NULL) {
+        PyMem_Free(self->field);
+    }
+}
+
 static int
 Reader_traverse(ReaderObj *self, visitproc visit, void *arg)
 {
@@ -933,7 +950,7 @@ static struct PyMemberDef Reader_memberlist[] = {
 
 
 static PyType_Slot Reader_Type_slots[] = {
-    {Py_tp_dealloc, Reader_dealloc},
+    {Py_tp_finalize, Reader_finalize},
     {Py_tp_doc, (char*)Reader_Type_doc},
     {Py_tp_traverse, Reader_traverse},
     {Py_tp_clear, Reader_clear},
@@ -1316,20 +1333,6 @@ static struct PyMemberDef Writer_memberlist[] = {
     { NULL }
 };
 
-static void
-Writer_dealloc(WriterObj *self)
-{
-    PyTypeObject *tp = Py_TYPE(self);
-    PyObject_GC_UnTrack(self);
-    Py_XDECREF(self->dialect);
-    Py_XDECREF(self->write);
-    if (self->rec != NULL)
-        PyMem_Free(self->rec);
-    Py_XDECREF(self->error_obj);
-    PyObject_GC_Del(self);
-    Py_DECREF(tp);
-}
-
 static int
 Writer_traverse(WriterObj *self, visitproc visit, void *arg)
 {
@@ -1348,6 +1351,15 @@ Writer_clear(WriterObj *self)
     return 0;
 }
 
+static void
+Writer_finalize(WriterObj *self)
+{
+    Writer_clear(self);
+    if (self->rec != NULL) {
+        PyMem_Free(self->rec);
+    }
+}
+
 PyDoc_STRVAR(Writer_Type_doc,
 "CSV writer\n"
 "\n"
@@ -1356,7 +1368,7 @@ PyDoc_STRVAR(Writer_Type_doc,
 );
 
 static PyType_Slot Writer_Type_slots[] = {
-    {Py_tp_dealloc, Writer_dealloc},
+    {Py_tp_finalize, Writer_finalize},
     {Py_tp_doc, (char*)Writer_Type_doc},
     {Py_tp_traverse, Writer_traverse},
     {Py_tp_clear, Writer_clear},
