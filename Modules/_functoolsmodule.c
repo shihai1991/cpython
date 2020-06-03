@@ -38,6 +38,7 @@ get_functools_state(PyObject *module)
 }
 
 static void partial_setvectorcall(partialobject *pto);
+static struct PyModuleDef _functools_module;
 
 static PyObject *
 partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
@@ -51,7 +52,7 @@ partial_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         return NULL;
     }
 
-    PyObject *module = PyType_GetModule(type);
+    PyObject *module = _PyType_GetModuleByDef(type, &_functools_module);
     if (module == NULL) {
         return NULL;
     }
