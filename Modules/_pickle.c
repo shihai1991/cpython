@@ -3641,7 +3641,10 @@ save_global(PicklerObject *self, PyObject *obj, PyObject *name)
                      obj, global_name, module_name);
         goto error;
     }
-    if (cls != obj) {
+
+    const char *cls_name = _PyType_Name((PyTypeObject *)cls);
+    const char *obj_name = _PyType_Name((PyTypeObject *)obj);
+    if (cls != obj && strcmp(cls_name, obj_name)) {
         Py_DECREF(cls);
         PyErr_Format(st->PicklingError,
                      "Can't pickle %R: it's not the same object as %S.%S",
