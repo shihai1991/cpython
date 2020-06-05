@@ -27,6 +27,7 @@ typedef struct _functools_state {
     PyObject *kwd_mark;
     PyTypeObject *partial_type;
     PyTypeObject *lru_cache_type;
+    PyTypeObject *keyobject_type;
 } _functools_state;
 
 static inline _functools_state*
@@ -517,50 +518,41 @@ keyobject_call(keyobject *ko, PyObject *args, PyObject *kwds);
 static PyObject *
 keyobject_richcompare(PyObject *ko, PyObject *other, int op);
 
-static PyTypeObject keyobject_type = {
-    PyVarObject_HEAD_INIT(&PyType_Type, 0)
-    "functools.KeyWrapper",             /* tp_name */
-    sizeof(keyobject),                  /* tp_basicsize */
-    0,                                  /* tp_itemsize */
-    /* methods */
-    (destructor)keyobject_dealloc,      /* tp_dealloc */
-    0,                                  /* tp_vectorcall_offset */
-    0,                                  /* tp_getattr */
-    0,                                  /* tp_setattr */
-    0,                                  /* tp_as_async */
-    0,                                  /* tp_repr */
-    0,                                  /* tp_as_number */
-    0,                                  /* tp_as_sequence */
-    0,                                  /* tp_as_mapping */
-    0,                                  /* tp_hash */
-    (ternaryfunc)keyobject_call,        /* tp_call */
-    0,                                  /* tp_str */
-    PyObject_GenericGetAttr,            /* tp_getattro */
-    0,                                  /* tp_setattro */
-    0,                                  /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,                 /* tp_flags */
-    0,                                  /* tp_doc */
-    (traverseproc)keyobject_traverse,   /* tp_traverse */
-    (inquiry)keyobject_clear,           /* tp_clear */
-    keyobject_richcompare,              /* tp_richcompare */
-    0,                                  /* tp_weaklistoffset */
-    0,                                  /* tp_iter */
-    0,                                  /* tp_iternext */
-    0,                                  /* tp_methods */
-    keyobject_members,                  /* tp_members */
-    0,                                  /* tp_getset */
+static PyType_Slot keyobject_type_slots[] = {
+    {Py_tp_dealloc, keyobject_dealloc},
+    {Py_tp_call, keyobject_call},
+    {Py_tp_getattro, PyObject_GenericGetAttr},
+    {Py_tp_traverse, keyobject_traverse},
+    {Py_tp_clear, keyobject_clear},
+    {Py_tp_richcompare, keyobject_richcompare},
+    {Py_tp_members, keyobject_members},
+    {0, 0}
+};
+
+static PyType_Spec keyobject_type_spec = {
+    .name = "functools.KeyWrapper",
+    .basicsize = sizeof(keyobject),
+    .flags = Py_TPFLAGS_DEFAULT,
+    .slots = keyobject_type_slots 
 };
 
 static PyObject *
 keyobject_call(keyobject *ko, PyObject *args, PyObject *kwds)
 {
-    PyObject *object;
+    PyObject *object, *module;
     keyobject *result;
+    _functools_state *state;
     static char *kwargs[] = {"obj", NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O:K", kwargs, &object))
         return NULL;
-    result = PyObject_New(keyobject, &keyobject_type);
+
+    module = _PyType_GetModuleByDef(Py_TYPE(ko), &_functools_module);
+    if (module == NULL) {
+        return NULL;
+    }
+    state = get_functools_state(module);
+    result = PyObject_New(keyobject, state->keyobject_type);
     if (!result)
         return NULL;
     Py_INCREF(ko->cmp);
@@ -578,9 +570,16 @@ keyobject_richcompare(PyObject *ko, PyObject *other, int op)
     PyObject *y;
     PyObject *compare;
     PyObject *answer;
+    PyObject *module;
     PyObject* stack[2];
+    _functools_state *state;
 
-    if (!Py_IS_TYPE(other, &keyobject_type)) {
+    module = _PyType_GetModuleByDef(Py_TYPE(ko), &_functools_module);
+    if (module == NULL) {
+        return NULL;
+    }
+    state = get_functools_state(module);
+    if (!Py_IS_TYPE(other, state->keyobject_type)) {
         PyErr_Format(PyExc_TypeError, "other argument must be K instance");
         return NULL;
     }
@@ -614,10 +613,13 @@ functools_cmp_to_key(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject *cmp;
     static char *kwargs[] = {"mycmp", NULL};
     keyobject *object;
+    _functools_state *state;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O:cmp_to_key", kwargs, &cmp))
         return NULL;
-    object = PyObject_New(keyobject, &keyobject_type);
+
+    state = get_functools_state(self);
+    object = PyObject_New(keyobject, state->keyobject_type);
     if (!object)
         return NULL;
     Py_INCREF(cmp);
@@ -872,7 +874,7 @@ uncached_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwd
 static inline PyObject*
 lru_cache_object_get_module(lru_cache_object *self)
 {
-    return PyType_GetModule(Py_TYPE(self));
+    return _PyType_GetModuleByDef(Py_TYPE(self), &_functools_module);
 }
 
 static PyObject *
@@ -881,6 +883,9 @@ infinite_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwd
     PyObject *result, *module;
     Py_hash_t hash;
     module = lru_cache_object_get_module(self);
+    if (module == NULL) {
+        return NULL;
+    }
     PyObject *key = lru_cache_make_key(module, args, kwds, self->typed);
     if (!key)
         return NULL;
@@ -983,6 +988,9 @@ bounded_lru_cache_wrapper(lru_cache_object *self, PyObject *args, PyObject *kwds
     Py_hash_t hash;
 
     module = lru_cache_object_get_module(self);
+    if (module == NULL) {
+        return NULL;
+    }
     key = lru_cache_make_key(module, args, kwds, self->typed);
     if (!key)
         return NULL;
@@ -1441,6 +1449,16 @@ _functools_exec(PyObject *module)
     }
     state->lru_cache_type = lru_cache_type;
 
+    PyTypeObject *keyobject_type =
+        (PyTypeObject *)PyType_FromModuleAndSpec(module, &keyobject_type_spec, NULL);
+    if (keyobject_type == NULL) {
+        return -1;
+    }
+    if (PyModule_AddType(module, keyobject_type) < 0) {
+        return -1;
+    }
+    state->keyobject_type = keyobject_type;
+
     return 0;
 }
 
@@ -1451,6 +1469,7 @@ _functools_traverse(PyObject *module, visitproc visit, void *arg)
     Py_VISIT(state->kwd_mark);
     Py_VISIT(state->partial_type);
     Py_VISIT(state->lru_cache_type);
+    Py_VISIT(state->keyobject_type);
     return 0;
 }
 
@@ -1461,6 +1480,7 @@ _functools_clear(PyObject *module)
     Py_CLEAR(state->kwd_mark);
     Py_CLEAR(state->partial_type);
     Py_CLEAR(state->lru_cache_type);
+    Py_CLEAR(state->keyobject_type);
     return 0;
 }
 
