@@ -532,7 +532,7 @@ static PyType_Slot keyobject_type_slots[] = {
 static PyType_Spec keyobject_type_spec = {
     .name = "functools.KeyWrapper",
     .basicsize = sizeof(keyobject),
-    .flags = Py_TPFLAGS_DEFAULT,
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,
     .slots = keyobject_type_slots 
 };
 
