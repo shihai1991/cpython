@@ -67,7 +67,7 @@ class TestServerThread(threading.Thread):
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
         self._threads = threading_helper.threading_setup()
-        os.environ = support.EnvironmentVarGuard()
+        os.environ = os_helper.EnvironmentVarGuard()
         self.server_started = threading.Event()
         self.thread = TestServerThread(self, self.request_handler)
         self.thread.start()
