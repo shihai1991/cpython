@@ -146,10 +146,13 @@ static inline int _Py_IS_TYPE(const PyObject *ob, const PyTypeObject *type) {
 #define Py_IS_TYPE(ob, type) _Py_IS_TYPE(_PyObject_CAST_CONST(ob), type)
 
 
-static inline void _Py_SET_REFCNT(PyObject *ob, Py_ssize_t refcnt) {
+static inline void _Py_SET_REFCNT(const char *filename, int lineno, PyObject *ob, Py_ssize_t refcnt) {
+    FILE *fp = fopen("/home/shihai/ref.txt", "a");
+    fprintf(fp, "set: %p %s %d old refcnt: %ld\n", ob, filename, lineno, ob->ob_refcnt);
     ob->ob_refcnt = refcnt;
+    fclose(fp);
 }
-#define Py_SET_REFCNT(ob, refcnt) _Py_SET_REFCNT(_PyObject_CAST(ob), refcnt)
+#define Py_SET_REFCNT(ob, refcnt) _Py_SET_REFCNT(__FILE__, __LINE__, _PyObject_CAST(ob), refcnt)
 
 
 static inline void _Py_SET_TYPE(PyObject *ob, PyTypeObject *type) {
@@ -419,15 +422,18 @@ PyAPI_FUNC(void) _Py_NegativeRefcount(const char *filename, int lineno,
 
 PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 
-static inline void _Py_INCREF(PyObject *op)
+static inline void _Py_INCREF(const char * filename, int lineno, PyObject *op)
 {
 #ifdef Py_REF_DEBUG
     _Py_RefTotal++;
 #endif
+    FILE *fp = fopen("/home/shihai/ref.txt", "a");
+    fprintf(fp, "in: %p %s %d old refcnt: %ld\n", op, filename, lineno, op->ob_refcnt);
     op->ob_refcnt++;
+    fclose(fp);
 }
 
-#define Py_INCREF(op) _Py_INCREF(_PyObject_CAST(op))
+#define Py_INCREF(op) _Py_INCREF(__FILE__, __LINE__, _PyObject_CAST(op))
 
 static inline void _Py_DECREF(
 #ifdef Py_REF_DEBUG
@@ -435,6 +441,9 @@ static inline void _Py_DECREF(
 #endif
     PyObject *op)
 {
+    FILE *fp = fopen("/home/shihai/ref.txt", "a");
+    fprintf(fp, "de: %p %s %d old refcnt: %ld\n", op, filename, lineno, op->ob_refcnt);
+    fclose(fp);
 #ifdef Py_REF_DEBUG
     _Py_RefTotal--;
 #endif
@@ -501,23 +510,29 @@ static inline void _Py_DECREF(
     } while (0)
 
 /* Function to use in case the object pointer can be NULL: */
-static inline void _Py_XINCREF(PyObject *op)
+static inline void _Py_XINCREF(const char *filename, int lineno, PyObject *op)
 {
+    FILE *fp = fopen("/home/shihai/ref.txt", "a");
+    fprintf(fp, "xin: %p %s %d\n", op, filename, lineno);
+    fclose(fp);
     if (op != NULL) {
         Py_INCREF(op);
     }
 }
 
-#define Py_XINCREF(op) _Py_XINCREF(_PyObject_CAST(op))
+#define Py_XINCREF(op) _Py_XINCREF(__FILE__, __LINE__, _PyObject_CAST(op))
 
-static inline void _Py_XDECREF(PyObject *op)
+static inline void _Py_XDECREF(const char *filename, int lineno, PyObject *op)
 {
+    FILE *fp = fopen("/home/shihai/ref.txt", "a");
+    fprintf(fp, "xde: %p %s %d\n", op, filename, lineno);
+    fclose(fp);
     if (op != NULL) {
         Py_DECREF(op);
     }
 }
 
-#define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op))
+#define Py_XDECREF(op) _Py_XDECREF(__FILE__, __LINE__, _PyObject_CAST(op))
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
