@@ -2873,6 +2873,9 @@ error:
     Py_XDECREF(dict);
     Py_XDECREF(bases);
     Py_XDECREF(slots);
+    if(type != NULL) {
+        Py_XDECREF(type->tp_base);
+    }
     Py_XDECREF(type);
     return NULL;
 }
