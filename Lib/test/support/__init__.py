@@ -22,6 +22,7 @@ try:
 except ImportError:
     unicode_legacy_string = None
 
+
 __all__ = [
     # globals
     "PIPE_MAX_SIZE", "verbose", "max_memuse", "use_resources", "failfast",
