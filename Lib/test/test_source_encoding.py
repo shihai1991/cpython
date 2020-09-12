@@ -14,11 +14,11 @@ class MiscSourceEncodingTest(unittest.TestCase):
 
     def test_pep263(self):
         self.assertEqual(
-            "<F0><C9><D4><CF><CE>".encode("utf-8"),
+            "ðÉÔÏÎ".encode("utf-8"),
             b'\xd0\x9f\xd0\xb8\xd1\x82\xd0\xbe\xd0\xbd'
         )
         self.assertEqual(
-            "\<F0>".encode("utf-8"),
+            "\ð".encode("utf-8"),
             b'\\\xd0\x9f'
         )
 
