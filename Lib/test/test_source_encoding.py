@@ -14,11 +14,11 @@ class MiscSourceEncodingTest(unittest.TestCase):
 
     def test_pep263(self):
         self.assertEqual(
-            "ðÉÔÏÎ".encode("utf-8"),
+            "<F0><C9><D4><CF><CE>".encode("utf-8"),
             b'\xd0\x9f\xd0\xb8\xd1\x82\xd0\xbe\xd0\xbd'
         )
         self.assertEqual(
-            "\ð".encode("utf-8"),
+            "\<F0>".encode("utf-8"),
             b'\\\xd0\x9f'
         )
 
@@ -230,8 +230,8 @@ class EncodingsTest(unittest.TestCase):
 
     def test_bpo39337(self):
         """
-        bpo-39337: encodings.normalize_encoding() should ignore
-        non-ASCII letters similar to _Py_normalize_encoding().
+        bpo-39337: similar to _Py_normalize_encoding(),
+        encodings.normalize_encoding() should ignore non-ASCII letters .
         """
         import encodings
 
