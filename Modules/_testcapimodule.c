@@ -1017,6 +1017,41 @@ test_buildvalue_N(PyObject *self, PyObject *Py_UNUSED(ignored))
     Py_RETURN_NONE;
 }
 
+static PyObject *
+test_get_statictype_slots(PyObject *self, PyObject *Py_UNUSED(ignored))
+{
+    /*char *tp_name = PyType_GetSlot(&PyLong_Type, Py_type_name);
+    assert(strcmp(tp_name, "int") == 0);
+
+    newfunc tp_new = PyType_GetSlot(&PyLong_Type, Py_type_new);
+    PyObject *args = PyTuple_New(0);
+    PyObject *object = tp_new(&PyLong_Type, args, NULL);
+    assert(object);
+
+    reprfunc tp_repr = PyType_GetSlot(&PyLong_Type, Py_type_repr);
+    PyObject *decimal_str = tp_repr(object);
+    assert(decimal_str);
+
+    ternaryfunc tp_call = PyType_GetSlot(&PyLong_Type, Py_type_call);
+    assert(tp_call == 0);*/
+
+    binaryfunc nb_add = PyType_GetSlot(&PyLong_Type, Py_tp_nb_add); 
+    /*PyObject *result = nb_add(object, object);
+    assert(result);
+
+    lenfunc mp_length = PyType_GetSlot(&PyLong_Type, Py_type_mp_length);
+    assert(mp_length == NULL);
+
+    void *over_value = PyType_GetSlot(&PyLong_Type,
+            Py_type_bf_releasebuffer + 1);
+    assert(over_value == NULL);
+
+    Py_DECREF(decimal_str);
+    Py_DECREF(args);
+    Py_DECREF(object);
+    Py_DECREF(result);*/
+    Py_RETURN_NONE;
+}
 
 static PyObject *
 get_args(PyObject *self, PyObject *args)
@@ -5606,6 +5641,7 @@ static PyMethodDef TestMethods[] = {
     {"test_buildvalue_N",       test_buildvalue_N,               METH_NOARGS},
     {"test_buildvalue_issue38913", test_buildvalue_issue38913,   METH_NOARGS},
     {"get_args", get_args, METH_VARARGS},
+    {"test_get_statictype_slots", test_get_statictype_slots, METH_NOARGS},
     {"get_kwargs", (PyCFunction)(void(*)(void))get_kwargs, METH_VARARGS|METH_KEYWORDS},
     {"getargs_tuple",           getargs_tuple,                   METH_VARARGS},
     {"getargs_keywords", (PyCFunction)(void(*)(void))getargs_keywords,

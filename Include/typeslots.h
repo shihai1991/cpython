@@ -84,7 +84,15 @@
 #define Py_am_await 77
 #define Py_am_aiter 78
 #define Py_am_anext 79
+#define Py_tp_nb_add 80
 #if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03050000
 /* New in 3.5 */
 #define Py_tp_finalize 80
 #endif
+
+
+typedef struct PySlot_Offset {
+    int slot;
+    short offset;
+    short parent_offset;
+} PySlot_Offset;
