@@ -142,3 +142,11 @@ List Objects
 
    Return a new tuple object containing the contents of *list*; equivalent to
    ``tuple(list)``.
+
+
+.. c:function:: int PyList_Remove(PyObject *list, PyObject *item)
+
+   Remove the *item* of *list*. Return ``0`` on success, ``-1`` on error.
+   This is the equivalent of ``list.remove()``.
+
+   .. versionadded:: 3.10

@@ -35,6 +35,7 @@ PyAPI_FUNC(int) PyList_Append(PyObject *, PyObject *);
 
 PyAPI_FUNC(PyObject *) PyList_GetSlice(PyObject *, Py_ssize_t, Py_ssize_t);
 PyAPI_FUNC(int) PyList_SetSlice(PyObject *, Py_ssize_t, Py_ssize_t, PyObject *);
+PyAPI_FUNC(int) PyList_Remove(PyObject *, PyObject *);
 
 PyAPI_FUNC(int) PyList_Sort(PyObject *);
 PyAPI_FUNC(int) PyList_Reverse(PyObject *);

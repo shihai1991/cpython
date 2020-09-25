@@ -182,6 +182,12 @@ test_list_api(PyObject *self, PyObject *Py_UNUSED(ignored))
             return (PyObject*)NULL;
         }
     }
+
+    /* check PyList_Remove() */
+    PyObject *ob = PyLong_FromLong(NLIST+1);
+    assert(PyList_Append(list, ob) == 0);
+    assert(PyList_Remove(list, ob) == 0);
+    assert(PyList_GET_SIZE(list) == NLIST);
     Py_DECREF(list);
 #undef NLIST
 

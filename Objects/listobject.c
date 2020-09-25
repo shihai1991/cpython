@@ -722,6 +722,21 @@ PyList_SetSlice(PyObject *a, Py_ssize_t ilow, Py_ssize_t ihigh, PyObject *v)
     return list_ass_slice((PyListObject *)a, ilow, ihigh, v);
 }
 
+int
+PyList_Remove(PyObject *op, PyObject *value) {
+    if (!PyList_Check(op)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    for (Py_ssize_t i = 0; i < PyList_GET_SIZE(op); i++) {
+        PyObject *item = PyList_GET_ITEM(op, i);
+        if (item == value) {
+            return list_ass_slice((PyListObject *)op, i, i+1, NULL);
+        }
+    }
+    return 0;
+}
+
 static PyObject *
 list_inplace_repeat(PyListObject *self, Py_ssize_t n)
 {

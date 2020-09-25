@@ -1,0 +1,1 @@
+Add a :c:func:`PyList_Remove` function which could remove object from list.
