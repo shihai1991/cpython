@@ -79,34 +79,22 @@ PyDoc_STRVAR(gc_collect__doc__,
 "The number of unreachable objects is returned.");
 
 #define GC_COLLECT_METHODDEF    \
-    {"collect", (PyCFunction)(void(*)(void))gc_collect, METH_FASTCALL|METH_KEYWORDS, gc_collect__doc__},
+    {"collect", (PyCFunction)(void(*)(void))gc_collect, METH_VARARGS|METH_KEYWORDS, gc_collect__doc__},
 
 static Py_ssize_t
 gc_collect_impl(PyObject *module, int generation);
 
 static PyObject *
-gc_collect(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+gc_collect(PyObject *module, PyObject *args, PyObject *kwargs)
 {
     PyObject *return_value = NULL;
-    static const char * const _keywords[] = {"generation", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "collect", 0};
-    PyObject *argsbuf[1];
-    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 0;
+    static char *_keywords[] = {"generation", NULL};
     int generation = NUM_GENERATIONS - 1;
     Py_ssize_t _return_value;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 0, 1, 0, argsbuf);
-    if (!args) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|i:collect", _keywords, &generation)) {
         goto exit;
     }
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    generation = _PyLong_AsInt(args[0]);
-    if (generation == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional_pos:
     _return_value = gc_collect_impl(module, generation);
     if ((_return_value == -1) && PyErr_Occurred()) {
         goto exit;
@@ -233,32 +221,21 @@ PyDoc_STRVAR(gc_get_objects__doc__,
 "that are in that generation.");
 
 #define GC_GET_OBJECTS_METHODDEF    \
-    {"get_objects", (PyCFunction)(void(*)(void))gc_get_objects, METH_FASTCALL|METH_KEYWORDS, gc_get_objects__doc__},
+    {"get_objects", (PyCFunction)(void(*)(void))gc_get_objects, METH_VARARGS|METH_KEYWORDS, gc_get_objects__doc__},
 
 static PyObject *
 gc_get_objects_impl(PyObject *module, Py_ssize_t generation);
 
 static PyObject *
-gc_get_objects(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+gc_get_objects(PyObject *module, PyObject *args, PyObject *kwargs)
 {
     PyObject *return_value = NULL;
-    static const char * const _keywords[] = {"generation", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "get_objects", 0};
-    PyObject *argsbuf[1];
-    Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 0;
+    static char *_keywords[] = {"generation", NULL};
     Py_ssize_t generation = -1;
 
-    args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 0, 1, 0, argsbuf);
-    if (!args) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|O&:get_objects", _keywords, _Py_convert_optional_to_ssize_t, &generation)) {
         goto exit;
     }
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (!_Py_convert_optional_to_ssize_t(args[0], &generation)) {
-        goto exit;
-    }
-skip_optional_pos:
     return_value = gc_get_objects_impl(module, generation);
 
 exit:
@@ -372,4 +349,4 @@ gc_get_freeze_count(PyObject *module, PyObject *Py_UNUSED(ignored))
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=61e15f3a549f3ab5 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=2dcff50fe2a8575f input=a9049054013a1b77]*/
