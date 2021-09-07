@@ -26,6 +26,7 @@ Data members:
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_tuple.h"         // _PyTuple_FromArray()
 #include "pycore_structseq.h"     // PyStructSequence_InitType()
+#include "pycore_moduleobject.h"  // _PyModule_GetState()
 
 #include "code.h"
 #include "frameobject.h"          // PyFrame_GetBack()
@@ -1250,6 +1251,18 @@ sys_get_coroutine_origin_tracking_depth_impl(PyObject *module)
 }
 
 static PyTypeObject AsyncGenHooksType;
+
+typedef struct {
+    PyTypeObject *VersionInfoType;
+} sys_state;
+
+static inline sys_state *
+get_sys_state(PyObject *module)
+{
+    void *state = _PyModule_GetState(module);
+    assert(state != NULL);
+    return (sys_state *)state;
+}
 
 PyDoc_STRVAR(asyncgen_hooks_doc,
 "asyncgen_hooks\n\
@@ -2588,8 +2601,6 @@ PyDoc_STRVAR(version_info__doc__,
 \n\
 Version information as a named tuple.");
 
-static PyTypeObject VersionInfoType;
-
 static PyStructSequence_Field version_info_fields[] = {
     {"major", "Major release number"},
     {"minor", "Minor release number"},
@@ -2607,13 +2618,13 @@ static PyStructSequence_Desc version_info_desc = {
 };
 
 static PyObject *
-make_version_info(PyThreadState *tstate)
+make_version_info(PyThreadState *tstate,  sys_state *state)
 {
     PyObject *version_info;
     char *s;
     int pos = 0;
 
-    version_info = PyStructSequence_New(&VersionInfoType);
+    version_info = PyStructSequence_New(state->VersionInfoType);
     if (version_info == NULL) {
         return NULL;
     }
@@ -2725,16 +2736,37 @@ error:
     return NULL;
 }
 
+static int
+sys_traverse(PyObject *module, visitproc visit, void *arg)
+{
+    sys_state *state = get_sys_state(module);
+    Py_VISIT(state->VersionInfoType);
+    return 0;
+}
+
+static int
+sys_clear(PyObject *module)
+{
+    sys_state *state = get_sys_state(module);
+    Py_CLEAR(state->VersionInfoType);
+    return 0;
+}
+
+static void
+sys_free(void *module)
+{
+    sys_clear((PyObject *)module);
+}
+
 static struct PyModuleDef sysmodule = {
     PyModuleDef_HEAD_INIT,
-    "sys",
-    sys_doc,
-    -1, /* multiple "initialization" just copies the module dict. */
-    sys_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
+    .m_name = "sys",
+    .m_doc = sys_doc,
+    .m_size = sizeof(sys_state),
+    .m_methods = sys_methods,
+    .m_traverse = sys_traverse,
+    .m_clear = sys_clear,
+    .m_free = sys_free
 };
 
 /* Updating the sys namespace, returning NULL pointer on error */
@@ -2755,7 +2787,7 @@ static struct PyModuleDef sysmodule = {
         SET_SYS(key, PyUnicode_FromString(value))
 
 static PyStatus
-_PySys_InitCore(PyThreadState *tstate, PyObject *sysdict)
+_PySys_InitCore(PyThreadState *tstate, PyObject *sysmod, PyObject *sysdict)
 {
     PyObject *version_info;
     int res;
@@ -2808,14 +2840,15 @@ _PySys_InitCore(PyThreadState *tstate, PyObject *sysdict)
 #endif
 
     /* version_info */
-    if (VersionInfoType.tp_name == NULL) {
-        if (_PyStructSequence_InitType(&VersionInfoType,
-                                       &version_info_desc,
-                                       Py_TPFLAGS_DISALLOW_INSTANTIATION) < 0) {
+    sys_state *state = get_sys_state(sysmod);
+    if (state->VersionInfoType == NULL) {
+        state->VersionInfoType = PyStructSequence_NewType(&version_info_desc);
+        if (state->VersionInfoType == NULL) {
             goto type_init_failed;
         }
+        state->VersionInfoType->tp_flags |= Py_TPFLAGS_DISALLOW_INSTANTIATION;
     }
-    version_info = make_version_info(tstate);
+    version_info = make_version_info(tstate, state);
     SET_SYS("version_info", version_info);
 
     /* implementation */
@@ -3065,7 +3098,7 @@ _PySys_Create(PyThreadState *tstate, PyObject **sysmod_p)
         return status;
     }
 
-    status = _PySys_InitCore(tstate, sysdict);
+    status = _PySys_InitCore(tstate, sysmod, sysdict);
     if (_PyStatus_EXCEPTION(status)) {
         return status;
     }

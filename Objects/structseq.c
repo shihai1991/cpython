@@ -460,6 +460,52 @@ initialize_members(PyStructSequence_Desc *desc, PyMemberDef* members,
     members[k].name = NULL;
 }
 
+PyObject *
+PyStructSequence_FromDesc(PyObject *module, PyStructSequence_Desc *desc,
+                          unsigned long tp_flags)
+{
+    Py_ssize_t n_unnamed_members;
+
+    Py_ssize_t n_members = count_members(desc, &n_unnamed_members);
+    PyHeapTypeObject *res = (PyHeapTypeObject *)PyType_GenericAlloc(
+        &PyType_Type, n_members - n_unnamed_members + 1);
+    if (res == NULL) {
+        return NULL;
+    }
+
+    PyTypeObject *type = &res->ht_type;
+    type->tp_name = desc->name;
+    type->tp_basicsize = sizeof(PyStructSequence) - sizeof(PyObject *);
+    type->tp_itemsize = sizeof(PyObject *);
+    type->tp_dealloc = (destructor)structseq_dealloc;
+    type->tp_repr = (reprfunc)structseq_repr;
+    type->tp_doc = desc->doc;
+    type->tp_base = &PyTuple_Type;
+    type->tp_methods = structseq_methods;
+    type->tp_new = structseq_new;
+    type->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | tp_flags;
+    type->tp_traverse = (traverseproc) structseq_traverse;
+
+    PyMemberDef *members = PyHeapType_GET_MEMBERS(res);
+    initialize_members(desc, members, n_members);
+    type->tp_members = members;
+
+    if (PyType_Ready(type) < 0) {
+        goto fail;
+    }
+
+    if (initialize_structseq_dict(
+            desc, type->tp_dict, n_members, n_unnamed_members) < 0) {
+        goto fail;
+    }
+
+    assert(_PyType_CheckConsistency(type));
+    return (PyObject *)res;
+
+fail:
+    Py_DECREF(res);
+    return NULL;
+}
 
 int
 _PyStructSequence_InitType(PyTypeObject *type, PyStructSequence_Desc *desc,
