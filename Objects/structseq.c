@@ -547,6 +547,7 @@ PyStructSequence_FromModuleAndDesc(PyObject *module,
     members = PyMem_NEW(PyMemberDef, n_members - n_unnamed_members + 1);
     if (members == NULL) {
         PyErr_NoMemory();
+        printf("PyMem_NEW()\n");
         return NULL;
     }
     initialize_members(desc, members, n_members);
@@ -574,6 +575,7 @@ PyStructSequence_FromModuleAndDesc(PyObject *module,
         (PyObject *)&PyTuple_Type);
     PyMem_Free(members);
     if (type == NULL) {
+        printf("PyType_FromSpecWithBases()\n");
         return NULL;
     }
     Py_XINCREF(module);
@@ -582,6 +584,7 @@ PyStructSequence_FromModuleAndDesc(PyObject *module,
     if (initialize_structseq_dict(
             desc, type->tp_dict, n_members, n_unnamed_members) < 0) {
         Py_DECREF(type);
+        printf("initialize_structseq() failed\n");
         return NULL;
     }
 

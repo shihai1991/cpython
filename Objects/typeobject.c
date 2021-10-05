@@ -3399,8 +3399,10 @@ PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec, PyObject *bases)
     }
 
     res = (PyHeapTypeObject*)PyType_GenericAlloc(&PyType_Type, nmembers);
-    if (res == NULL)
+    if (res == NULL) {
+        printf("PyType_GenericAlloc() failed.\n");
         return NULL;
+    }
     res_start = (char*)res;
 
     if (spec->name == NULL) {
@@ -3465,6 +3467,7 @@ PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec, PyObject *bases)
     /* Calculate best base, and check that all bases are type objects */
     base = best_base(bases);
     if (base == NULL) {
+        printf("Can't find the base class.\n");
         Py_DECREF(bases);
         goto fail;
     }
@@ -3547,8 +3550,10 @@ PyType_FromModuleAndSpec(PyObject *module, PyType_Spec *spec, PyObject *bases)
         type->tp_vectorcall_offset = vectorcalloffset;
     }
 
-    if (PyType_Ready(type) < 0)
+    if (PyType_Ready(type) < 0) {
+        printf("PyType_Ready() failed.\n");
         goto fail;
+    }
 
     if (type->tp_dictoffset) {
         res->ht_cached_keys = _PyDict_NewKeysForClass();

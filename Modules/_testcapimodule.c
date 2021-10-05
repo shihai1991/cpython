@@ -23,6 +23,9 @@
 #include "structmember.h"         // PyMemberDef
 #include <float.h>
 #include <signal.h>
+#include <execinfo.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #ifdef MS_WINDOWS
 #  include <winsock2.h>         /* struct timeval */
@@ -3919,6 +3922,17 @@ test_structseq_newtype_null_descr_doc(PyObject *Py_UNUSED(self),
     Py_RETURN_NONE;
 }
 
+void print_stacktrace() {
+    int size = 64;
+    void *array[64];
+    int stack_num = backtrace(array, size);
+    char **stacktrace = backtrace_symbols(array, stack_num);
+    for (int i = 0; i < stack_num; ++i) {
+        printf("%s\n", stacktrace[i]);
+    }
+    free(stacktrace);
+}
+
 static PyObject *
 test_structseq_newtype_from_heap(PyObject *Py_UNUSED(self),
                                  PyObject *Py_UNUSED(args))
@@ -3931,6 +3945,7 @@ test_structseq_newtype_from_heap(PyObject *Py_UNUSED(self),
 
     descr.name = "_testcapi.test_descr";
     descr.fields = descr_fields;
+    descr.doc = "This is used to test for creating a new type from heap";
     descr.n_in_sequence = 1;
 
     PyTypeObject* structseq_type =
